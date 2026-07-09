@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Airport Staff Ops Board</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg:#FBF5E9;
+  --bg-panel:#FFFFFF;
+  --bg-panel-2:#FFF1DE;
+  --sea:#00A6A0;
+  --sea-dark:#00807B;
+  --sea-pale:#E1F5F3;
+  --sun:#FFB100;
+  --sun-pale:#FFF0CC;
+  --coral:#FF6F59;
+  --coral-pale:#FFE3DD;
+  --text:#20302E;
+  --text-muted:#77877F;
+  --border:#EADFC7;
+  --red:#E63946;
+  --green:#2A9D8F;
+  --mono:'IBM Plex Mono', monospace;
+  --body:'Inter', sans-serif;
+  --disp:'Poppins', sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--body);}
+body{min-height:100vh;}
+.wrap{max-width:1260px;margin:0 auto;padding:20px 20px 60px;}
+
+.header{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;margin-bottom:18px;flex-wrap:wrap;gap:14px;}
+.brand{display:flex;flex-direction:column;gap:3px;}
+.brand .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--sea-dark);text-transform:uppercase;font-weight:600;}
+.brand h1{margin:0;font-family:var(--disp);font-size:23px;font-weight:800;color:var(--text);}
+.header-right{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+
+.airport-switch{display:flex;background:var(--bg-panel);border:2px solid var(--border);border-radius:30px;padding:4px;gap:2px;}
+.airport-switch button{border:none;background:none;padding:8px 18px;border-radius:24px;font-family:var(--disp);font-weight:700;font-size:13px;color:var(--text-muted);cursor:pointer;}
+.airport-switch button.active.lca{background:var(--sea);color:#fff;}
+.airport-switch button.active.pfo{background:var(--coral);color:#fff;}
+
+.clock{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--sea-dark);text-align:right;line-height:1.1;}
+.clock .date{display:block;font-size:11.5px;color:var(--text-muted);font-weight:500;letter-spacing:.03em;}
+
+.tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:2px solid var(--border);flex-wrap:wrap;}
+.tab-btn{background:none;border:none;color:var(--text-muted);font-family:var(--disp);font-size:13.5px;font-weight:700;padding:10px 16px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;}
+.tab-btn:hover{color:var(--text);}
+.tab-btn.active{color:var(--sea-dark);border-bottom-color:var(--sun);}
+.panel{display:none;}
+.panel.active{display:block;}
+
+.card{background:var(--bg-panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:18px;box-shadow:0 2px 10px rgba(60,50,20,.04);}
+.card h2{margin:0 0 4px;font-family:var(--disp);font-size:15px;color:var(--text);font-weight:700;}
+.card .sub{font-size:12.5px;color:var(--text-muted);margin-bottom:14px;line-height:1.5;}
+
+.dropzone{border:2px dashed var(--sea);background:var(--sea-pale);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:.15s;}
+.dropzone:hover, .dropzone.drag{border-color:var(--sun);background:var(--sun-pale);}
+.dropzone .big{font-size:14px;font-weight:700;margin-bottom:4px;color:var(--text);}
+.dropzone .small{font-size:12px;color:var(--text-muted);}
+#fileInput{display:none;}
+
+.presence-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--border);}
+.presence-row:first-child{border-top:none;}
+.presence-name{width:120px;flex:0 0 120px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:7px;}
+.p-dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px;}
+.presence-track{position:relative;flex:1;height:26px;background:linear-gradient(90deg, transparent 0, transparent calc(100%/24 - 1px), var(--border) calc(100%/24));background-size:calc(100%/24) 100%;border-radius:6px;}
+.presence-bar{position:absolute;top:4px;height:18px;border-radius:9px;opacity:.85;}
+.presence-count{font-family:var(--mono);font-size:11px;color:var(--text-muted);flex:0 0 70px;text-align:right;}
+.timeline-scale{position:relative;height:20px;margin-left:132px;margin-bottom:4px;}
+.timeline-scale span{position:absolute;top:0;font-family:var(--mono);font-size:10px;color:var(--text-muted);transform:translateX(-50%);}
+.now-wrap{position:relative;}
+.now-line{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:5;}
+.now-line::after{content:'NOW';position:absolute;top:-15px;left:-14px;font-family:var(--mono);font-size:9px;color:var(--red);font-weight:700;}
+
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);font-weight:600;padding:7px 8px;border-bottom:2px solid var(--border);}
+td{padding:8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr.flagged td{background:var(--coral-pale);}
+.pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10.5px;font-family:var(--mono);font-weight:700;}
+.pill.A{background:var(--sea-pale);color:var(--sea-dark);}
+.pill.D{background:var(--sun-pale);color:#8a5b00;}
+.pax-flag{color:var(--red);font-weight:700;font-size:11px;font-family:var(--mono);}
+.op-tag{display:inline-block;margin-left:7px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.03em;color:var(--sea-dark);background:var(--sea-pale);padding:2px 7px;border-radius:10px;vertical-align:middle;}
+.staff-chip{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:3px 9px 3px 6px;font-size:11.5px;margin:2px 3px 2px 0;font-weight:700;color:#fff;}
+.staff-chip .chip-time{opacity:.9;font-weight:600;font-family:var(--mono);font-size:10px;background:rgba(255,255,255,.28);padding:1px 6px;border-radius:10px;white-space:nowrap;}
+.staff-chip button{background:none;border:none;color:#fff;opacity:.7;cursor:pointer;font-size:12px;line-height:1;padding:0;}
+.staff-chip button:hover{opacity:1;}
+select,input,textarea{background:#fff;border:1.5px solid var(--border);color:var(--text);border-radius:7px;padding:6px 9px;font-family:var(--body);font-size:13px;}
+button.btn{background:var(--sea);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:var(--disp);}
+button.btn:hover{filter:brightness(1.06);}
+button.btn.ghost{background:none;border:1.5px solid var(--border);color:var(--text);font-weight:600;font-family:var(--body);}
+button.btn.danger{background:var(--coral-pale);color:var(--red);border:1.5px solid var(--coral);}
+.row-flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label{font-size:11px;color:var(--text-muted);font-family:var(--mono);letter-spacing:.02em;}
+.assign-dropdown{position:relative;display:inline-block;}
+.assign-menu{position:absolute;top:100%;left:0;background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:6px;z-index:20;min-width:170px;display:none;box-shadow:0 10px 28px rgba(30,40,30,.15);}
+.assign-menu.open{display:block;}
+.assign-menu label{display:flex;align-items:center;gap:6px;font-size:12.5px;padding:5px 6px;border-radius:6px;cursor:pointer;}
+.assign-menu label:hover{background:var(--sea-pale);}
+
+.hbar-wrap{background:var(--bg-panel-2);border-radius:5px;height:9px;width:140px;overflow:hidden;}
+.hbar{height:100%;background:var(--green);}
+.hbar.over{background:var(--red);}
+.status-ok{color:var(--green);font-family:var(--mono);font-size:11px;font-weight:700;}
+.status-over{color:var(--red);font-family:var(--mono);font-size:11px;font-weight:700;}
+
+.empty{color:var(--text-muted);font-size:13px;padding:26px;text-align:center;border:2px dashed var(--border);border-radius:10px;}
+.duty-block{display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;}
+.duty-block input[type="time"]{font-family:var(--mono);font-size:12px;padding:2px 4px;border:1px solid var(--border);border-radius:5px;}
+.duty-removeblock{padding:0 6px;font-size:13px;line-height:1;color:var(--text-muted);}
+.duty-addblock{font-size:11px;padding:3px 8px;margin-left:2px;}
+.note{font-size:11.5px;color:var(--text-muted);margin-top:8px;line-height:1.5;}
+.week-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.week-nav .lbl{font-family:var(--mono);font-size:12.5px;color:var(--sea-dark);font-weight:700;}
+.swatch{width:14px;height:14px;border-radius:5px;display:inline-block;vertical-align:middle;}
+.legend{display:flex;gap:16px;margin-top:10px;font-size:11.5px;color:var(--text-muted);flex-wrap:wrap;}
+.legend .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <div class="brand">
+      <span class="eyebrow">Summertimes Travel &middot; Ground Ops</span>
+      <h1>Airport Staff Ops Board</h1>
+    </div>
+    <div class="header-right">
+      <div class="airport-switch">
+        <button class="active lca" data-airport="LCA">Larnaca</button>
+        <button class="pfo" data-airport="PFO">Paphos</button>
+      </div>
+      <div class="clock">
+        <span id="clockTime">--:--:--</span>
+        <span class="date" id="clockDate">-</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="live">Live Board</button>
+    <button class="tab-btn" data-tab="flights">Today's Flights</button>
+    <button class="tab-btn" data-tab="dutylog">Duty Log</button>
+    <button class="tab-btn" data-tab="staff">Staff &amp; Settings</button>
+    <button class="tab-btn" data-tab="weekly">Weekly Hours</button>
+  </div>
+
+  <div class="panel active" id="panel-live">
+    <div class="card">
+      <h2>Who's at the airport &mdash; <span id="liveDateLabel"></span></h2>
+      <div class="sub">Bar shows each person's earliest arrival to latest departure that day. Flight-by-flight detail is in the table below.</div>
+      <div id="liveBoardContent"></div>
+    </div>
+    <div class="card">
+      <h2>Flight detail &mdash; <span id="liveDateLabel2"></span></h2>
+      <div id="liveFlightTableWrap"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-flights">
+    <div class="card">
+      <h2>Import today's export</h2>
+      <div class="sub">Upload the daily flight export directly &mdash; flight time, pax, and staff names from the Remarks column are read automatically.</div>
+      <div class="dropzone" id="dropzone">
+        <div class="big">Drop the .xlsx export here, or click to choose a file</div>
+        <div class="small">Reads ArrDep, FlightDate, FlightTime, FlyName, Totals and Remarks columns by header name</div>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+      <div class="note" id="importMsg"></div>
+    </div>
+
+    <div class="card">
+      <div class="row-flex" style="justify-content:space-between;margin-bottom:10px;">
+        <h2 style="margin:0;">Flights &mdash; <span id="flightsDateLabel"></span></h2>
+        <div class="row-flex">
+          <input type="date" id="flightDatePicker">
+          <button class="btn ghost" id="addFlightBtn">+ Add flight manually</button>
+          <button class="btn danger" id="clearDateBtn">Clear this date</button>
+        </div>
+      </div>
+      <div id="flightsTableWrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>Upload log</h2>
+      <div class="sub">Record of every import for this airport &mdash; useful for spotting test uploads or checking what's currently loaded.</div>
+      <div id="uploadLogWrap"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-dutylog">
+    <div class="card">
+      <div class="row-flex" style="justify-content:space-between;margin-bottom:10px;">
+        <h2 style="margin:0;">Duty Log &mdash; <span id="dutyLogDateLabel"></span></h2>
+        <div class="row-flex">
+          <input type="date" id="dutyLogDatePicker">
+          <button class="btn ghost" id="dutyLogPrintBtn">🖨 Print day report</button>
+        </div>
+      </div>
+      <div class="sub">Enter each staff member's actual worked blocks for this date (matches the paper log, e.g. 08:00-13:30). Use the &ldquo;+ block&rdquo; button for split shifts, and the Off toggle when someone isn't working. Entries here override the calculated flight-based estimate for that day in Weekly Hours; days left blank keep using the estimate.</div>
+      <div id="dutyLogTableWrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>Flights &mdash; <span id="dutyLogFlightsDateLabel"></span> <span class="sub" style="display:inline;">(reference only)</span></h2>
+      <div id="dutyLogFlightsWrap"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-staff">
+    <div class="card">
+      <h2>Staff roster &mdash; <span id="staffAirportLabel"></span></h2>
+      <div class="sub">Auto-populated from names seen in Remarks. Full-time defaults to 48h/week, part-time to 24h/week. Each person belongs to one airport.</div>
+      <div id="staffTableWrap"></div>
+      <div class="row-flex" style="margin-top:12px;">
+        <div class="field"><label>Name</label><input type="text" id="newStaffName" placeholder="e.g. Anti"></div>
+        <div class="field"><label>Contract</label>
+          <select id="newStaffType"><option value="FT">Full-time</option><option value="PT">Part-time</option></select>
+        </div>
+        <div class="field"><label>&nbsp;</label><button class="btn" id="addStaffBtn">+ Add staff</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Shift duration assumptions</h2>
+      <div class="sub">Used to estimate on-site time per flight, on top of any manually logged delay. Shared across both airports.</div>
+      <div class="row-flex">
+        <div class="field" style="max-width:420px;"><label>Arrival clearing time</label><div style="font-size:12px;color:var(--text-muted);padding-top:4px;">Auto-calculated from pax: 1-15=60m, 16+=90m</div></div>
+        <div class="field"><label>Departure: minutes before flight staff arrive at departure hall</label><input type="number" id="setDepMin" style="width:90px;"></div>
+        <div class="field"><label>Pax threshold requiring 2+ staff</label><input type="number" id="setPaxThresh" style="width:90px;"></div>
+        <div class="field"><label>&nbsp;</label><button class="btn ghost" id="saveSettingsBtn">Save settings</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-weekly">
+    <div class="card">
+      <div class="week-nav">
+        <button class="btn ghost" id="prevWeekBtn">&larr; Prev week</button>
+        <span class="lbl" id="weekLabel"></span>
+        <button class="btn ghost" id="nextWeekBtn">Next week &rarr;</button>
+      </div>
+      <div class="week-nav" style="margin-top:8px;">
+        <label style="font-size:12px;color:var(--muted,#888);">From <input type="date" id="customStart" style="margin-left:4px;"></label>
+        <label style="font-size:12px;color:var(--muted,#888);">To <input type="date" id="customEnd" style="margin-left:4px;"></label>
+        <button class="btn ghost" id="applyCustomRangeBtn">Apply range</button>
+        <button class="btn ghost" id="resetRangeBtn" style="display:none;">&times; Back to weekly view</button>
+      </div>
+      <h2>Hours vs contract<span id="rangeModeLabel">, this week</span> &mdash; <span id="weeklyAirportLabel"></span></h2>
+      <div class="sub">Includes delay minutes logged per flight.</div>
+      <div id="weeklyTableWrap"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const DAY_MS = 86400000;
+const PALETTE = ['#FF6F59','#00A6A0','#FFB100','#8E5572','#5FAD56','#EF476F','#118AB2','#FB8500','#06D6A0','#D62839','#7209B7','#F4A261'];
+let STATE = { settings:{arrMin:90, depMin:150, paxThresh:25, ftCap:48, ptCap:24}, staff:[], flights:[], driverLog:{}, uploadLog:[], dutyLog:{} };
+let currentAirport = 'LCA';
+let currentFlightDate = todayISO();
+let dutyLogDate = todayISO();
+let currentWeekAnchor = todayISO();
+
+function todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function pad(n){ return String(n).padStart(2,'0'); }
+function timeToMin(t){ if(!t) return 0; const [h,m]=String(t).split(':').map(Number); return h*60+(m||0); }
+function minToTime(m){ m=((m%1440)+1440)%1440; return pad(Math.floor(m/60))+':'+pad(Math.floor(m%60)); }
+function uid(){ return Math.random().toString(36).slice(2,10); }
+
+function airportStaff(){ return STATE.staff.filter(s=>s.airport===currentAirport); }
+function airportFlights(){ return STATE.flights.filter(f=>f.airport===currentAirport); }
+
+function colorFor(staff){ return staff.color || PALETTE[STATE.staff.findIndex(s=>s.id===staff.id) % PALETTE.length]; }
+
+function getOrCreateStaff(name, airport){
+  name = name.trim();
+  if(!name) return null;
+  let s = STATE.staff.find(x=>x.name.toLowerCase()===name.toLowerCase() && x.airport===airport);
+  if(!s){
+    s = {id:uid(), name, type:'FT', color: PALETTE[STATE.staff.length % PALETTE.length], airport};
+    STATE.staff.push(s);
+  }
+  return s;
+}
+
+async function loadState(){
+  try{ const s = await window.storage.get('settings', true); if(s && s.value) STATE.settings = {...STATE.settings, ...JSON.parse(s.value)}; }catch(e){}
+  try{ const st = await window.storage.get('staff', true); if(st && st.value) STATE.staff = JSON.parse(st.value); }catch(e){}
+  try{ const fl = await window.storage.get('flights', true); if(fl && fl.value) STATE.flights = JSON.parse(fl.value); }catch(e){}
+  try{ const dl = await window.storage.get('driverLog', true); if(dl && dl.value) STATE.driverLog = JSON.parse(dl.value); }catch(e){}
+  try{ const ul = await window.storage.get('uploadLog', true); if(ul && ul.value) STATE.uploadLog = JSON.parse(ul.value); }catch(e){}
+  try{ const dt = await window.storage.get('dutyLog', true); if(dt && dt.value) STATE.dutyLog = JSON.parse(dt.value); }catch(e){}
+  if(!STATE.staff.some(s=>s.airport==='LCA')){
+    ['Anti','Tania','Linda'].forEach(n=>getOrCreateStaff(n,'LCA'));
+    STATE.staff.find(s=>s.name==='Linda' && s.airport==='LCA').type='PT';
+  }
+  if(!STATE.staff.some(s=>s.airport==='PFO')){
+    ['Evi','Tasos'].forEach(n=>getOrCreateStaff(n,'PFO'));
+  }
+  await saveStaff();
+  if(!STATE.flights.length){ seedSampleFlights(); await saveFlights(); }
+}
+
+function seedSampleFlights(){
+  const d = currentFlightDate;
+  const rows = [
+    ['A','02:35','W64626',2,'Driver'],['A','08:30','QS1108',85,'Anti'],['A','10:05','JU480',3,'Anti'],
+    ['A','13:30','OS793',27,'Anti'],['A','15:05','QS1508',26,'Anti'],
+    ['A','16:00','4Y1240',2,'Tania/Linda'],['A','16:20','OS795',17,'Tania/Linda']
+  ];
+  STATE.flights = rows.map(r=>({id:uid(), airport:'LCA', date:d, arrDep:r[0], time:r[1], flight:r[2], pax:r[3], delayMin:0, assigned: splitRemarks(r[4], d, 'LCA')}));
+}
+
+function splitRemarks(remarks, dateISO, airport){
+  if(!remarks) return [];
+  const names = String(remarks).split('/').map(n=>n.trim()).filter(Boolean);
+  const ids = [];
+  names.forEach(n=>{
+    if(n.toUpperCase()==='DRIVER'){
+      const resolved = STATE.driverLog[airport+'|'+dateISO];
+      if(resolved){ const s=getOrCreateStaff(resolved, airport); if(s) ids.push(s.id); }
+      else { ids.push('__DRIVER_UNRESOLVED__'); }
+    } else {
+      const s = getOrCreateStaff(n, airport); if(s) ids.push(s.id);
+    }
+  });
+  return ids;
+}
+
+async function saveSettings(){ await window.storage.set('settings', JSON.stringify(STATE.settings), true); }
+async function saveStaff(){ await window.storage.set('staff', JSON.stringify(STATE.staff), true); }
+async function saveFlights(){ await window.storage.set('flights', JSON.stringify(STATE.flights), true); }
+async function saveDriverLog(){ await window.storage.set('driverLog', JSON.stringify(STATE.driverLog), true); }
+async function saveUploadLog(){ await window.storage.set('uploadLog', JSON.stringify(STATE.uploadLog), true); }
+async function saveDutyLog(){ await window.storage.set('dutyLog', JSON.stringify(STATE.dutyLog), true); }
+
+function arrivalClearMinutes(pax){
+  const p = Number(pax)||0;
+  if(p <= 15) return 60;
+  return 90; // 16+ pax
+}
+function isEasyJet(f){
+  return (f.operators||[]).some(op => String(op).toLowerCase().includes('easy'));
+}
+function flightWindow(f){
+  const startMin0 = timeToMin(f.time);
+  const delay = Number(f.delayMin)||0;
+  if(f.arrDep === 'A') return { start: startMin0, end: startMin0 + arrivalClearMinutes(f.pax) + delay };
+  if(!isEasyJet(f)) return { start: startMin0, end: startMin0 }; // no departure duty for non-EasyJet operators
+  return { start: startMin0 - STATE.settings.depMin, end: startMin0 + delay };
+}
+function flightHours(f){ const w = flightWindow(f); return Math.max(0,(w.end - w.start))/60; }
+function isFlagged(f){ return f.arrDep === 'A' && f.pax > STATE.settings.paxThresh && f.assigned.filter(id=>id!=='__DRIVER_UNRESOLVED__').length < 2; }
+
+// Merge overlapping/touching time windows into continuous blocks.
+// A real gap between windows (start of next > end of current) is preserved as a separate block.
+function mergeWindows(windows){
+  const sorted = [...windows].sort((a,b)=>a.start-b.start);
+  const merged = [];
+  sorted.forEach(w=>{
+    const last = merged[merged.length-1];
+    if(last && w.start <= last.end){
+      last.end = Math.max(last.end, w.end);
+    } else {
+      merged.push({start:w.start, end:w.end});
+    }
+  });
+  return merged;
+}
+// Total on-site hours for one staff member across a set of flights, correctly handling
+// overlapping flight windows (merged, not double-counted) and real gaps (kept separate,
+// e.g. a morning flight then an afternoon/evening shift on the same day).
+// Flights are grouped by date first so windows from different days never merge together.
+function staffHoursForFlights(flights){
+  const byDate = {};
+  flights.forEach(f=>{ (byDate[f.date] = byDate[f.date]||[]).push(f); });
+  let total = 0;
+  Object.values(byDate).forEach(dayFlights=>{
+    const merged = mergeWindows(dayFlights.map(flightWindow));
+    merged.forEach(b=>{ total += Math.max(0,(b.end-b.start))/60; });
+  });
+  return total;
+}
+
+function tickClock(){
+  const now = new Date();
+  document.getElementById('clockTime').textContent = pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
+  document.getElementById('clockDate').textContent = now.toLocaleDateString('en-GB',{weekday:'short', day:'2-digit', month:'short', year:'numeric'});
+}
+setInterval(tickClock, 1000);
+
+document.querySelectorAll('.airport-switch button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    currentAirport = btn.dataset.airport;
+    document.querySelectorAll('.airport-switch button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    renderAll();
+  });
+});
+
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    renderAll();
+  });
+});
+
+function renderAll(){
+  renderLiveBoard(); renderFlightsTab(); renderStaffTab(); renderWeekly(); renderUploadLog(); renderDutyLogTab();
+}
+
+function flightCell(f){
+  const ops = (f.operators||[]).join('/');
+  return `${f.flight}` + (ops ? `<span class="op-tag">${ops}</span>` : '');
+}
+// --- Duty Log: actual shift blocks entered by the duty manager, per staff per day.
+// Structure: STATE.dutyLog[airport][date][staffId] = { off:bool, blocks:[{start,end}], remarks:'' }
+function getDutyEntry(airport, date, staffId){
+  return (STATE.dutyLog[airport] && STATE.dutyLog[airport][date] && STATE.dutyLog[airport][date][staffId]) || null;
+}
+function setDutyEntry(airport, date, staffId, entry){
+  STATE.dutyLog[airport] = STATE.dutyLog[airport] || {};
+  STATE.dutyLog[airport][date] = STATE.dutyLog[airport][date] || {};
+  STATE.dutyLog[airport][date][staffId] = entry;
+}
+// Minutes actually worked that day per the duty manager's entry, or null if nothing entered
+// yet (meaning: fall back to the flight-calculated estimate for that day).
+function actualMinutesForDay(airport, date, staffId){
+  const entry = getDutyEntry(airport, date, staffId);
+  if(!entry) return null;
+  if(entry.off) return 0;
+  let total = 0;
+  (entry.blocks||[]).forEach(b=>{
+    if(!b.start || !b.end) return;
+    let s = timeToMin(b.start), e = timeToMin(b.end);
+    if(e <= s) e += 1440; // block crosses midnight
+    total += (e - s);
+  });
+  return total;
+}
+// Total hours for one staff member across a date range: uses the duty manager's actual
+// entry for any day it exists, otherwise falls back to the calculated flight-window estimate.
+function weeklyHoursForStaff(s, wb, flightsInRange){
+  let totalMin = 0;
+  let d = new Date(wb.start+'T00:00:00');
+  const endD = new Date(wb.end+'T00:00:00');
+  while(d <= endD){
+    const iso = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    const actual = actualMinutesForDay(s.airport, iso, s.id);
+    if(actual !== null){
+      totalMin += actual;
+    } else {
+      const dayFlights = flightsInRange.filter(f=>f.date===iso && f.assigned.includes(s.id));
+      mergeWindows(dayFlights.map(flightWindow)).forEach(b=>{ totalMin += Math.max(0,(b.end-b.start)); });
+    }
+    d.setTime(d.getTime()+DAY_MS);
+  }
+  return totalMin/60;
+}
+// Small badge shown next to a staff member's name: report time for departures
+// (e.g. "rpt 11:30" for a 14:00 flight), or clear time for arrivals (e.g. "til 20:10").
+// Returns '' when there's no duty at all (e.g. a non-EasyJet departure).
+function dutyTimeLabel(f){
+  const w = flightWindow(f);
+  if(w.start===w.end) return '';
+  return f.arrDep==='D' ? `rpt ${minToTime(w.start)}` : `til ${minToTime(w.end)}`;
+}
+
+function renderLiveBoard(){
+  const d = currentFlightDate;
+  document.getElementById('liveDateLabel').textContent = d;
+  document.getElementById('liveDateLabel2').textContent = d;
+  const dayFlights = airportFlights().filter(f=>f.date===d);
+  const staffList = airportStaff();
+  const container = document.getElementById('liveBoardContent');
+  if(!staffList.length){ container.innerHTML = '<div class="empty">Add staff for this airport first.</div>'; return; }
+
+  const nowMin = (new Date()).getHours()*60 + (new Date()).getMinutes();
+  const nowPct = (nowMin/1440*100).toFixed(2);
+
+  let scaleHtml = '<div class="timeline-scale">';
+  for(let h=0; h<=24; h+=2){ scaleHtml += `<span style="left:${(h/24*100).toFixed(2)}%">${pad(h)}:00</span>`; }
+  scaleHtml += '</div>';
+
+  let rows = '';
+  let anyActive = false;
+  staffList.forEach(s=>{
+    const staffFlights = dayFlights.filter(f=>f.assigned.includes(s.id));
+    if(!staffFlights.length){
+      rows += `<div class="presence-row"><div class="presence-name"><span class="p-dot" style="background:${colorFor(s)}"></span>${s.name}</div><div class="presence-track"></div><div class="presence-count">off today</div></div>`;
+      return;
+    }
+    anyActive = true;
+    const windows = staffFlights.map(flightWindow);
+    const blocks = mergeWindows(windows);
+    const barsHtml = blocks.map(b=>{
+      const left = (Math.max(0,b.start)/1440*100).toFixed(2);
+      const width = Math.max(0.6,((b.end-b.start)/1440*100)).toFixed(2);
+      return `<div class="presence-bar" style="left:${left}%;width:${width}%;background:${colorFor(s)}"></div>`;
+    }).join('');
+    const rangeLabel = blocks.map(b=>`${minToTime(b.start)}\u2013${minToTime(b.end)}`).join(', ');
+    rows += `<div class="presence-row"><div class="presence-name"><span class="p-dot" style="background:${colorFor(s)}"></span>${s.name}</div>
+      <div class="presence-track">${barsHtml}</div>
+      <div class="presence-count">${rangeLabel} \u00b7 ${staffFlights.length} fl.</div></div>`;
+  });
+
+  const nowLine = d===todayISO() ? `<div class="now-line" style="left:calc(132px + (100% - 132px) * ${nowPct/100})"></div>` : '';
+  container.innerHTML = `<div class="now-wrap">${scaleHtml}${rows}${nowLine}</div>` +
+    (anyActive ? '' : '<div class="note">No one assigned yet for this date.</div>') +
+    `<div class="legend"><span><span class="dot" style="background:var(--red)"></span>Now marker</span><span>Bars = merged on-site blocks (gaps between bars = off-site, e.g. split shifts)</span></div>`;
+
+  const tblWrap = document.getElementById('liveFlightTableWrap');
+  if(!dayFlights.length){ tblWrap.innerHTML = '<div class="empty">No flights loaded for this date yet.</div>'; return; }
+  const sorted = [...dayFlights].sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
+  let html = `<table><thead><tr><th>Type</th><th>Time</th><th>Flight</th><th>Pax</th><th>Staff</th><th>Flag</th></tr></thead><tbody>`;
+  sorted.forEach(f=>{
+    const flagged = isFlagged(f);
+    const chips = f.assigned.map(sid=>{
+      if(sid==='__DRIVER_UNRESOLVED__') return `<span class="staff-chip" style="background:var(--text-muted);">Driver (?)</span>`;
+      const s = STATE.staff.find(x=>x.id===sid);
+      if(!s) return '';
+      const t = dutyTimeLabel(f);
+      return `<span class="staff-chip" style="background:${colorFor(s)}">${s.name}${t?`<span class="chip-time">${t}</span>`:''}</span>`;
+    }).join('');
+    html += `<tr class="${flagged?'flagged':''}"><td><span class="pill ${f.arrDep}">${f.arrDep}</span></td><td style="font-family:var(--mono)">${f.time}</td><td>${flightCell(f)}</td><td>${f.pax}</td><td>${chips}</td><td>${flagged?'<span class="pax-flag">\u26a0 need 2+</span>':''}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  tblWrap.innerHTML = html;
+}
+
+function renderFlightsTab(){
+  document.getElementById('flightDatePicker').value = currentFlightDate;
+  document.getElementById('flightsDateLabel').textContent = currentFlightDate;
+  const dayFlights = airportFlights().filter(f=>f.date===currentFlightDate).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
+  const wrap = document.getElementById('flightsTableWrap');
+  const staffList = airportStaff();
+
+  let banner = '';
+  if(dayFlights.some(f=>f.assigned.includes('__DRIVER_UNRESOLVED__'))){
+    banner = `<div class="note" style="color:#8a5b00;margin-bottom:10px;">\u26a0 Some flights list "Driver" and need a name for ${currentFlightDate}. <button class="btn ghost" id="resolveDriverBtn" style="padding:3px 8px;font-size:11px;">Set driver name</button></div>`;
+  }
+
+  if(!dayFlights.length){ wrap.innerHTML = banner + '<div class="empty">No flights for this date/airport yet. Upload an export above or add manually.</div>'; bindDriverBtn(); return; }
+
+  let html = banner + `<table><thead><tr><th>Type</th><th>Time</th><th>Flight</th><th>Pax</th><th>Delay (min)</th><th>Assigned staff</th><th>Flag</th><th></th></tr></thead><tbody>`;
+  dayFlights.forEach(f=>{
+    const flagged = isFlagged(f);
+    const chips = f.assigned.map(sid=>{
+      if(sid==='__DRIVER_UNRESOLVED__') return `<span class="staff-chip" style="background:var(--text-muted);">Driver (?)</span>`;
+      const s = STATE.staff.find(x=>x.id===sid);
+      if(!s) return '';
+      const t = dutyTimeLabel(f);
+      return `<span class="staff-chip" style="background:${colorFor(s)}">${s.name}${t?`<span class="chip-time">${t}</span>`:''}<button data-unassign="${f.id}|${sid}">&times;</button></span>`;
+    }).join('');
+    html += `<tr class="${flagged?'flagged':''}">
+      <td><span class="pill ${f.arrDep}">${f.arrDep}</span></td>
+      <td style="font-family:var(--mono)">${f.time}</td>
+      <td>${flightCell(f)}</td>
+      <td>${f.pax}</td>
+      <td><input type="number" min="0" value="${f.delayMin||0}" data-delay="${f.id}" style="width:64px;"></td>
+      <td>${chips}
+        <div class="assign-dropdown">
+          <button class="btn ghost" data-assignopen="${f.id}" style="padding:3px 8px;font-size:11px;">+ assign</button>
+          <div class="assign-menu" id="menu-${f.id}">
+            ${staffList.map(s=>`<label><input type="checkbox" data-assign="${f.id}|${s.id}" ${f.assigned.includes(s.id)?'checked':''}> <span class="swatch" style="background:${colorFor(s)}"></span> ${s.name}</label>`).join('')}
+          </div>
+        </div>
+      </td>
+      <td>${flagged?'<span class="pax-flag">\u26a0 need 2+</span>':''}</td>
+      <td><button class="btn ghost" data-delflight="${f.id}" style="padding:4px 8px;">Delete</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  bindDriverBtn();
+  if(openAssignMenuId){ const m = document.getElementById('menu-'+openAssignMenuId); if(m) m.classList.add('open'); }
+
+  wrap.querySelectorAll('[data-delay]').forEach(inp=>{
+    inp.addEventListener('change', async e=>{
+      const f = STATE.flights.find(x=>x.id===inp.dataset.delay);
+      f.delayMin = Number(inp.value)||0;
+      await saveFlights(); renderFlightsTab(); renderLiveBoard();
+    });
+  });
+  wrap.querySelectorAll('[data-assignopen]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = btn.dataset.assignopen;
+      const menu = document.getElementById('menu-'+id);
+      const wasOpen = menu.classList.contains('open');
+      document.querySelectorAll('.assign-menu').forEach(m=>m.classList.remove('open'));
+      if(wasOpen){ openAssignMenuId = null; }
+      else { menu.classList.add('open'); openAssignMenuId = id; }
+    });
+  });
+  wrap.querySelectorAll('[data-assign]').forEach(cb=>{
+    cb.addEventListener('change', async e=>{
+      const [fid,sid] = cb.dataset.assign.split('|');
+      const f = STATE.flights.find(x=>x.id===fid);
+      if(cb.checked){ if(!f.assigned.includes(sid)) f.assigned.push(sid); }
+      else { f.assigned = f.assigned.filter(x=>x!==sid); }
+      openAssignMenuId = fid; // keep this flight's menu open so more names can be picked without reopening
+      await saveFlights(); renderFlightsTab(); renderLiveBoard();
+    });
+  });
+  wrap.querySelectorAll('[data-unassign]').forEach(btn=>{
+    btn.addEventListener('click', async e=>{
+      const [fid,sid] = btn.dataset.unassign.split('|');
+      const f = STATE.flights.find(x=>x.id===fid);
+      f.assigned = f.assigned.filter(x=>x!==sid);
+      await saveFlights(); renderFlightsTab(); renderLiveBoard();
+    });
+  });
+  wrap.querySelectorAll('[data-delflight]').forEach(btn=>{
+    btn.addEventListener('click', async e=>{
+      STATE.flights = STATE.flights.filter(x=>x.id!==btn.dataset.delflight);
+      await saveFlights(); renderFlightsTab(); renderLiveBoard();
+    });
+  });
+}
+function bindDriverBtn(){
+  const btn = document.getElementById('resolveDriverBtn');
+  if(btn) btn.addEventListener('click', async ()=>{ await resolveDriverPrompt(currentFlightDate, currentAirport); renderFlightsTab(); renderLiveBoard(); });
+}
+async function resolveDriverPrompt(dateISO, airport){
+  const name = prompt('Who was working as Driver on '+dateISO+' at '+(airport==='LCA'?'Larnaca':'Paphos')+'?');
+  if(!name) return;
+  STATE.driverLog[airport+'|'+dateISO] = name.trim();
+  await saveDriverLog();
+  const s = getOrCreateStaff(name.trim(), airport);
+  STATE.flights.forEach(f=>{
+    if(f.date===dateISO && f.airport===airport){
+      f.assigned = f.assigned.map(id=> id==='__DRIVER_UNRESOLVED__' ? s.id : id);
+    }
+  });
+  await saveStaff(); await saveFlights();
+}
+
+let openAssignMenuId = null;
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('.assign-dropdown')){ document.querySelectorAll('.assign-menu').forEach(m=>m.classList.remove('open')); openAssignMenuId = null; }
+});
+
+document.getElementById('flightDatePicker').addEventListener('change', e=>{
+  currentFlightDate = e.target.value;
+  renderFlightsTab(); renderLiveBoard();
+});
+
+document.getElementById('addFlightBtn').addEventListener('click', async ()=>{
+  const arrDep = prompt('Arrival (A) or Departure (D)?','A');
+  if(!arrDep) return;
+  const time = prompt('Flight time (HH:MM)','12:00');
+  const flight = prompt('Flight number','XX0000');
+  const pax = Number(prompt('Pax count','0'))||0;
+  STATE.flights.push({id:uid(), airport: currentAirport, date:currentFlightDate, arrDep:arrDep.toUpperCase()==='D'?'D':'A', time, flight, pax, operators:[], delayMin:0, assigned:[]});
+  await saveFlights(); renderFlightsTab(); renderLiveBoard();
+});
+
+document.getElementById('clearDateBtn').addEventListener('click', async ()=>{
+  const count = airportFlights().filter(f=>f.date===currentFlightDate).length;
+  if(!count){ return; }
+  if(!confirm(`Remove all ${count} flight(s) for ${currentFlightDate} at ${currentAirport==='LCA'?'Larnaca':'Paphos'}? This can't be undone.`)) return;
+  STATE.flights = STATE.flights.filter(f=>!(f.date===currentFlightDate && f.airport===currentAirport));
+  await saveFlights();
+  renderFlightsTab(); renderLiveBoard();
+});
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', ()=>fileInput.click());
+dropzone.addEventListener('dragover', e=>{ e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e=>{
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{ if(e.target.files.length) handleFile(e.target.files[0]); });
+
+function handleFile(file){
+  const reader = new FileReader();
+  reader.onload = async (e)=>{
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+      let headerIdx = -1, headerRow = null;
+      for(let i=0;i<rows.length;i++){
+        if(rows[i] && rows[i].some(c=>String(c).trim()==='ArrDep')){ headerIdx=i; headerRow=rows[i]; break; }
+      }
+      if(headerIdx===-1){ document.getElementById('importMsg').textContent = 'Could not find a header row containing "ArrDep" \u2014 check the file format.'; return; }
+      const colIdx = name => headerRow.findIndex(c=>String(c).trim()===name);
+      const iArr = colIdx('ArrDep'), iDate = colIdx('FlightDate'), iTime = colIdx('FlightTime'),
+            iFlight = colIdx('FlyName'), iTotals = colIdx('Totals'), iRemarks = colIdx('Remarks');
+      const fixedCols = new Set(['ArrDep','FlightDate','FlightTime','FlyName','Totals','Remarks']);
+      const operatorCols = headerRow.map((c,idx)=>({name:String(c||'').trim(), idx})).filter(c=>c.name && !fixedCols.has(c.name));
+
+      let dateFound = currentFlightDate;
+      const parsed = [];
+      for(let i=headerIdx+1;i<rows.length;i++){
+        const r = rows[i];
+        if(!r || r[iArr]==null) continue;
+        const arrDep = String(r[iArr]).trim().toUpperCase()==='D' ? 'D':'A';
+        let iso = currentFlightDate;
+        const dm = r[iDate] && String(r[iDate]).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+        if(dm){ let yy=dm[3].length===2?'20'+dm[3]:dm[3]; iso = yy+'-'+dm[2].padStart(2,'0')+'-'+dm[1].padStart(2,'0'); }
+        dateFound = iso;
+        const time = r[iTime] ? String(r[iTime]).trim() : '00:00';
+        const flight = r[iFlight] ? String(r[iFlight]).trim() : '???';
+        const paxMatch = r[iTotals] != null ? String(r[iTotals]).match(/\d+/) : null;
+        const pax = paxMatch ? Number(paxMatch[0]) : 0;
+        const remarks = iRemarks>-1 && r[iRemarks] ? String(r[iRemarks]).trim() : '';
+        const assigned = splitRemarks(remarks, iso, currentAirport);
+        const operators = operatorCols.filter(c=> r[c.idx]!=null && String(r[c.idx]).trim()!=='').map(c=>c.name);
+        const prior = STATE.flights.find(f=>f.date===iso && f.airport===currentAirport && f.time===time && f.flight===flight);
+        parsed.push({id: prior ? prior.id : uid(), airport: currentAirport, date: iso, arrDep, time, flight, pax, operators, delayMin: prior ? prior.delayMin : 0, assigned});
+      }
+      if(!parsed.length){ document.getElementById('importMsg').textContent = 'No flight rows found under the header.'; return; }
+      STATE.flights = STATE.flights.filter(f=>!(f.date===dateFound && f.airport===currentAirport)).concat(parsed);
+      currentFlightDate = dateFound;
+      STATE.uploadLog.unshift({id:uid(), airport: currentAirport, filename: file.name, date: dateFound, timestamp: new Date().toISOString(), count: parsed.length});
+      await saveStaff(); await saveFlights(); await saveUploadLog();
+      const needsDriver = parsed.some(f=>f.assigned.includes('__DRIVER_UNRESOLVED__'));
+      document.getElementById('importMsg').textContent = `Imported ${parsed.length} flights for ${dateFound} from "${file.name}".` + (needsDriver ? ' Some flights list "Driver" \u2014 set the name in the table below.' : '');
+      renderFlightsTab(); renderLiveBoard(); renderStaffTab(); renderWeekly(); renderUploadLog();
+    }catch(err){
+      document.getElementById('importMsg').textContent = 'Could not read that file: '+err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderUploadLog(){
+  const wrap = document.getElementById('uploadLogWrap');
+  const logs = STATE.uploadLog.filter(u=>u.airport===currentAirport).slice(0,25);
+  if(!logs.length){ wrap.innerHTML = '<div class="empty">No uploads yet for this airport.</div>'; return; }
+  let html = `<table><thead><tr><th>When</th><th>File</th><th>Covers date</th><th>Flights</th></tr></thead><tbody>`;
+  logs.forEach(u=>{
+    const dt = new Date(u.timestamp);
+    html += `<tr><td style="font-family:var(--mono);font-size:11.5px;">${dt.toLocaleString('en-GB')}</td><td>${u.filename}</td><td style="font-family:var(--mono)">${u.date}</td><td>${u.count}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+// ============ Duty Log ============
+function readEntryFromRow(staffId){
+  const row = document.querySelector(`tr[data-staffrow="${staffId}"]`);
+  const off = row.querySelector('.duty-off').checked;
+  const blocks = Array.from(row.querySelectorAll('.duty-block')).map(el=>({
+    start: el.querySelector('.duty-start').value,
+    end: el.querySelector('.duty-end').value
+  }));
+  const remarks = row.querySelector('.duty-remarks').value;
+  return {off, blocks, remarks};
+}
+function wireDutyLogEvents(){
+  document.querySelectorAll('#dutyLogTableWrap tr[data-staffrow]').forEach(row=>{
+    const staffId = row.dataset.staffrow;
+    row.querySelectorAll('.duty-off, .duty-start, .duty-end, .duty-remarks').forEach(el=>{
+      el.addEventListener('change', async ()=>{
+        const entry = readEntryFromRow(staffId);
+        setDutyEntry(currentAirport, dutyLogDate, staffId, entry);
+        await saveDutyLog();
+        renderDutyLogTab(); renderWeekly();
+      });
+    });
+  });
+  document.querySelectorAll('.duty-addblock').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const staffId = btn.dataset.staff;
+      const entry = getDutyEntry(currentAirport, dutyLogDate, staffId) || {off:false, blocks:[], remarks:''};
+      entry.blocks = (entry.blocks && entry.blocks.length) ? entry.blocks.slice() : [{start:'',end:''}];
+      entry.blocks.push({start:'',end:''});
+      setDutyEntry(currentAirport, dutyLogDate, staffId, entry);
+      await saveDutyLog();
+      renderDutyLogTab();
+    });
+  });
+  document.querySelectorAll('.duty-removeblock').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const span = btn.closest('.duty-block');
+      const staffId = span.dataset.staff;
+      const idx = Number(span.dataset.idx);
+      const entry = getDutyEntry(currentAirport, dutyLogDate, staffId);
+      if(!entry || !entry.blocks || entry.blocks.length<=1) return;
+      entry.blocks.splice(idx,1);
+      setDutyEntry(currentAirport, dutyLogDate, staffId, entry);
+      await saveDutyLog();
+      renderDutyLogTab(); renderWeekly();
+    });
+  });
+}
+function renderDutyLogTab(){
+  document.getElementById('dutyLogDatePicker').value = dutyLogDate;
+  document.getElementById('dutyLogDateLabel').textContent = dutyLogDate;
+  document.getElementById('dutyLogFlightsDateLabel').textContent = dutyLogDate;
+  const staffList = airportStaff();
+  const wrap = document.getElementById('dutyLogTableWrap');
+  if(!staffList.length){ wrap.innerHTML = '<div class="empty">Add staff to log duty hours.</div>'; }
+  else {
+    let html = `<table><thead><tr><th></th><th>Name</th><th>Off</th><th>Blocks</th><th>Total</th><th>Remarks</th></tr></thead><tbody>`;
+    staffList.forEach(s=>{
+      const entry = getDutyEntry(currentAirport, dutyLogDate, s.id) || {off:false, blocks:[{start:'',end:''}], remarks:''};
+      const blocks = (entry.blocks && entry.blocks.length) ? entry.blocks : [{start:'',end:''}];
+      const mins = actualMinutesForDay(currentAirport, dutyLogDate, s.id);
+      const totalTxt = entry.off ? 'OFF' : (mins!==null ? (mins/60).toFixed(1)+'h' : '\u2014');
+      const blocksHtml = blocks.map((b,i)=>`
+        <span class="duty-block" data-staff="${s.id}" data-idx="${i}">
+          <input type="time" class="duty-start" value="${b.start||''}">
+          <span>&ndash;</span>
+          <input type="time" class="duty-end" value="${b.end||''}">
+          <button class="btn ghost duty-removeblock" title="Remove block"${blocks.length<=1?' style="visibility:hidden;"':''}>&times;</button>
+        </span>`).join('');
+      html += `<tr class="${entry.off?'flagged':''}" data-staffrow="${s.id}">
+        <td><span class="swatch" style="background:${colorFor(s)}"></span></td>
+        <td>${s.name}</td>
+        <td><input type="checkbox" class="duty-off" ${entry.off?'checked':''}></td>
+        <td>${blocksHtml}<button class="btn ghost duty-addblock" data-staff="${s.id}">+ block</button></td>
+        <td style="font-family:var(--mono)">${totalTxt}</td>
+        <td><input type="text" class="duty-remarks" value="${(entry.remarks||'').replace(/"/g,'&quot;')}" placeholder="e.g. + Kassandra" style="width:150px;"></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+    wireDutyLogEvents();
+  }
+
+  const dayFlights = STATE.flights.filter(f=>f.airport===currentAirport && f.date===dutyLogDate).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
+  const fwrap = document.getElementById('dutyLogFlightsWrap');
+  if(!dayFlights.length){ fwrap.innerHTML = '<div class="empty">No flights loaded for this date.</div>'; }
+  else {
+    let fhtml = `<table><thead><tr><th>Type</th><th>Time</th><th>Flight</th><th>Pax</th><th>Staff (per flight schedule)</th></tr></thead><tbody>`;
+    dayFlights.forEach(f=>{
+      const names = f.assigned.map(id=>{
+        if(id==='__DRIVER_UNRESOLVED__') return 'Driver (?)';
+        const s = STATE.staff.find(x=>x.id===id); return s ? s.name : '';
+      }).filter(Boolean).join(', ');
+      fhtml += `<tr><td><span class="pill ${f.arrDep}">${f.arrDep}</span></td><td style="font-family:var(--mono)">${f.time}</td><td>${flightCell(f)}</td><td>${f.pax}</td><td>${names}</td></tr>`;
+    });
+    fhtml += '</tbody></table>';
+    fwrap.innerHTML = fhtml;
+  }
+}
+document.getElementById('dutyLogDatePicker').addEventListener('change', e=>{
+  dutyLogDate = e.target.value;
+  renderDutyLogTab();
+});
+function formatBlocksForPrint(entry){
+  if(!entry) return '\u2014';
+  if(entry.off) return 'OFF';
+  const blocks = (entry.blocks||[]).filter(b=>b.start && b.end);
+  if(!blocks.length) return '\u2014';
+  return blocks.map(b=>`${b.start}\u2013${b.end}`).join(' & ');
+}
+document.getElementById('dutyLogPrintBtn').addEventListener('click', ()=>{
+  const date = dutyLogDate;
+  const airportName = currentAirport==='LCA' ? 'Larnaca' : 'Paphos';
+  const dayFlights = STATE.flights.filter(f=>f.airport===currentAirport && f.date===date).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
+  const staffList = airportStaff();
+  let rows = '';
+  dayFlights.forEach(f=>{
+    const names = f.assigned.map(id=>{
+      if(id==='__DRIVER_UNRESOLVED__') return 'Driver (?)';
+      const s = STATE.staff.find(x=>x.id===id); return s ? s.name : '';
+    }).filter(Boolean).join(', ');
+    const ops = (f.operators||[]).join('/');
+    rows += `<tr><td>${f.arrDep}</td><td>${date}</td><td>${f.time}</td><td>${f.flight}</td><td>${f.pax}</td><td>${ops}</td><td>${names}</td></tr>`;
+  });
+  let summary = '';
+  staffList.forEach(s=>{
+    const entry = getDutyEntry(currentAirport, date, s.id);
+    const mins = actualMinutesForDay(currentAirport, date, s.id);
+    const hoursTxt = entry && entry.off ? 'OFF' : (mins!==null ? (mins/60).toFixed(1)+' hrs' : '');
+    const blocksTxt = formatBlocksForPrint(entry);
+    const offClass = entry && entry.off ? ' style="background:#fff59d;"' : '';
+    summary += `<tr${offClass}><td>${s.name}</td><td>${blocksTxt}</td><td>${hoursTxt}</td><td>${(entry&&entry.remarks)?entry.remarks:''}</td></tr>`;
+  });
+  const w = window.open('', '_blank');
+  w.document.write(`<!doctype html><html><head><title>Flight detail \u2014 ${date}</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;margin:24px;}
+    h1{font-size:18px;margin-bottom:4px;}
+    .sub{color:#666;margin-bottom:16px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:24px;}
+    th,td{border:1px solid #999;padding:5px 8px;text-align:left;}
+    th{background:#f0f0f0;text-transform:uppercase;font-size:10.5px;}
+    h2{font-size:14px;margin-top:0;}
+  </style></head><body>
+  <h1>Flight detail &mdash; ${date}</h1>
+  <div class="sub">${airportName}</div>
+  <table><thead><tr><th>ArrDep</th><th>FlightDate</th><th>FlightTime</th><th>FlyName</th><th>Pax</th><th>Operator(s)</th><th>Staff</th></tr></thead><tbody>${rows}</tbody></table>
+  <h2>Duty summary</h2>
+  <table><thead><tr><th>Name</th><th>Shift blocks</th><th>Total hours</th><th>Remarks</th></tr></thead><tbody>${summary}</tbody></table>
+  <script>window.print();<\/script>
+  </body></html>`);
+  w.document.close();
+});
+function renderStaffTab(){
+  document.getElementById('staffAirportLabel').textContent = currentAirport==='LCA' ? 'Larnaca' : 'Paphos';
+  const wrap = document.getElementById('staffTableWrap');
+  const staffList = airportStaff();
+  if(!staffList.length){ wrap.innerHTML = '<div class="empty">No staff yet \u2014 add someone below.</div>'; return; }
+  let html = `<table><thead><tr><th></th><th>Name</th><th>Contract</th><th>Weekly cap</th><th></th></tr></thead><tbody>`;
+  staffList.forEach(s=>{
+    html += `<tr><td><span class="swatch" style="background:${colorFor(s)}"></span></td><td>${s.name}</td>
+      <td><select data-stype="${s.id}"><option value="FT" ${s.type==='FT'?'selected':''}>Full-time</option><option value="PT" ${s.type==='PT'?'selected':''}>Part-time</option></select></td>
+      <td>${s.type==='FT'?STATE.settings.ftCap:STATE.settings.ptCap}h</td>
+      <td><button class="btn ghost" data-delstaff="${s.id}" style="padding:4px 8px;">Remove</button></td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('[data-stype]').forEach(sel=>{
+    sel.addEventListener('change', async e=>{
+      const s = STATE.staff.find(x=>x.id===sel.dataset.stype);
+      s.type = sel.value; await saveStaff(); renderStaffTab(); renderWeekly();
+    });
+  });
+  wrap.querySelectorAll('[data-delstaff]').forEach(btn=>{
+    btn.addEventListener('click', async e=>{
+      STATE.staff = STATE.staff.filter(x=>x.id!==btn.dataset.delstaff);
+      STATE.flights.forEach(f=>{ f.assigned = f.assigned.filter(id=>id!==btn.dataset.delstaff); });
+      await saveStaff(); await saveFlights();
+      renderStaffTab(); renderFlightsTab(); renderLiveBoard(); renderWeekly();
+    });
+  });
+}
+
+document.getElementById('addStaffBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('newStaffName').value.trim();
+  if(!name) return;
+  const type = document.getElementById('newStaffType').value;
+  const s = getOrCreateStaff(name, currentAirport); s.type = type;
+  document.getElementById('newStaffName').value='';
+  await saveStaff(); renderStaffTab();
+});
+
+function loadSettingsForm(){
+  // arrMin removed: arrival clearing time is now auto-calculated from pax count
+  document.getElementById('setDepMin').value = STATE.settings.depMin;
+  document.getElementById('setPaxThresh').value = STATE.settings.paxThresh;
+}
+document.getElementById('saveSettingsBtn').addEventListener('click', async ()=>{
+  STATE.settings.depMin = Number(document.getElementById('setDepMin').value)||150;
+  STATE.settings.paxThresh = Number(document.getElementById('setPaxThresh').value)||25;
+  await saveSettings();
+  renderAll();
+});
+
+function weekBounds(iso){
+  const d = new Date(iso+'T00:00:00');
+  const day = (d.getDay()+6)%7;
+  const monday = new Date(d.getTime() - day*DAY_MS);
+  const sunday = new Date(monday.getTime() + 6*DAY_MS);
+  const fmt = x => x.getFullYear()+'-'+pad(x.getMonth()+1)+'-'+pad(x.getDate());
+  return {start: fmt(monday), end: fmt(sunday)};
+}
+let customRange = null; // {start, end} when set, overrides the Mon-Sun week view
+function renderWeekly(){
+  document.getElementById('weeklyAirportLabel').textContent = currentAirport==='LCA' ? 'Larnaca' : 'Paphos';
+  const wb = customRange ? customRange : weekBounds(currentWeekAnchor);
+  document.getElementById('weekLabel').textContent = wb.start+' \u2192 '+wb.end;
+  document.getElementById('rangeModeLabel').textContent = customRange ? '' : ', this week';
+  document.getElementById('prevWeekBtn').disabled = !!customRange;
+  document.getElementById('nextWeekBtn').disabled = !!customRange;
+  document.getElementById('resetRangeBtn').style.display = customRange ? '' : 'none';
+  const inWeek = airportFlights().filter(f=> f.date>=wb.start && f.date<=wb.end);
+  const staffList = airportStaff();
+  const wrap = document.getElementById('weeklyTableWrap');
+  if(!staffList.length){ wrap.innerHTML='<div class="empty">Add staff to see hours.</div>'; return; }
+  let html = `<table><thead><tr><th></th><th>Name</th><th>Contract</th><th>Hours worked</th><th>Cap</th><th>Progress</th><th>Status</th></tr></thead><tbody>`;
+  staffList.forEach(s=>{
+    const hours = weeklyHoursForStaff(s, wb, inWeek);
+    const cap = s.type==='FT'?STATE.settings.ftCap:STATE.settings.ptCap;
+    const pct = Math.min(100,(hours/cap*100));
+    const over = hours > cap;
+    html += `<tr><td><span class="swatch" style="background:${colorFor(s)}"></span></td><td>${s.name}</td><td><span class="pill ${s.type==='FT'?'A':'D'}">${s.type}</span></td>
+      <td style="font-family:var(--mono)">${hours.toFixed(1)}h</td>
+      <td style="font-family:var(--mono)">${cap}h</td>
+      <td><div class="hbar-wrap"><div class="hbar ${over?'over':''}" style="width:${pct}%"></div></div></td>
+      <td>${over? `<span class="status-over">+${(hours-cap).toFixed(1)}h over</span>` : `<span class="status-ok">${(cap-hours).toFixed(1)}h remaining</span>`}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+document.getElementById('prevWeekBtn').addEventListener('click', ()=>{
+  if(customRange) return;
+  const d = new Date(currentWeekAnchor+'T00:00:00'); d.setTime(d.getTime()-7*DAY_MS);
+  currentWeekAnchor = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  renderWeekly();
+});
+document.getElementById('nextWeekBtn').addEventListener('click', ()=>{
+  if(customRange) return;
+  const d = new Date(currentWeekAnchor+'T00:00:00'); d.setTime(d.getTime()+7*DAY_MS);
+  currentWeekAnchor = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  renderWeekly();
+});
+document.getElementById('applyCustomRangeBtn').addEventListener('click', ()=>{
+  const start = document.getElementById('customStart').value;
+  const end = document.getElementById('customEnd').value;
+  if(!start || !end){ alert('Pick both a start and end date.'); return; }
+  if(start > end){ alert('Start date must be before end date.'); return; }
+  customRange = { start, end };
+  renderWeekly();
+});
+document.getElementById('resetRangeBtn').addEventListener('click', ()=>{
+  customRange = null;
+  document.getElementById('customStart').value = '';
+  document.getElementById('customEnd').value = '';
+  renderWeekly();
+});
+
+(async function init(){
+  tickClock();
+  await loadState();
+  loadSettingsForm();
+  renderAll();
+})();
+</script>
+</body>
+</html>

@@ -87,6 +87,9 @@ tr.flagged td{background:var(--coral-pale);}
 .op-tag{display:inline-block;margin-left:7px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.03em;color:var(--sea-dark);background:var(--sea-pale);padding:2px 7px;border-radius:10px;vertical-align:middle;}
 .staff-chip{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:3px 9px 3px 6px;font-size:11.5px;margin:2px 3px 2px 0;font-weight:700;color:#fff;}
 .staff-chip .chip-time{opacity:.9;font-weight:600;font-family:var(--mono);font-size:10px;background:rgba(255,255,255,.28);padding:1px 6px;border-radius:10px;white-space:nowrap;}
+.staff-chip.conflict{box-shadow:0 0 0 2px #b91c1c;}
+.chip-conflict{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:10px;background:#b91c1c;color:#fff;font-size:9.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:help;animation:conflictPulse 1.4s ease-in-out infinite;}
+@keyframes conflictPulse{0%,100%{box-shadow:0 0 0 0 rgba(185,28,28,.55);}50%{box-shadow:0 0 0 4px rgba(185,28,28,0);}}
 .staff-chip button{background:none;border:none;color:#fff;opacity:.7;cursor:pointer;font-size:12px;line-height:1;padding:0;}
 .staff-chip button:hover{opacity:1;}
 select,input,textarea{background:#fff;border:1.5px solid var(--border);color:var(--text);border-radius:7px;padding:6px 9px;font-family:var(--body);font-size:13px;}
@@ -232,7 +235,7 @@ button.btn.danger{background:var(--coral-pale);color:var(--red);border:1.5px sol
       <div class="row-flex">
         <div class="field" style="max-width:420px;"><label>Arrival clearing time</label><div style="font-size:12px;color:var(--text-muted);padding-top:4px;">Auto-calculated from pax: 1-15=60m, 16+=90m</div></div>
         <div class="field"><label>Departure: minutes before flight staff arrive at departure hall</label><input type="number" id="setDepMin" style="width:90px;"></div>
-        <div class="field"><label>Pax threshold requiring 2+ staff</label><input type="number" id="setPaxThresh" style="width:90px;"></div>
+        <div class="field"><label>Pax per required staff member (rounded up)</label><input type="number" id="setPaxThresh" style="width:90px;"></div>
         <div class="field"><label>&nbsp;</label><button class="btn ghost" id="saveSettingsBtn">Save settings</button></div>
       </div>
     </div>
@@ -357,7 +360,43 @@ function flightWindow(f){
   return { start: startMin0 - STATE.settings.depMin, end: startMin0 + delay };
 }
 function flightHours(f){ const w = flightWindow(f); return Math.max(0,(w.end - w.start))/60; }
-function isFlagged(f){ return f.arrDep === 'A' && f.pax > STATE.settings.paxThresh && f.assigned.filter(id=>id!=='__DRIVER_UNRESOLVED__').length < 2; }
+// External-support operators: our staff don't cover these arrivals/departures at all
+// (a partner company handles them), so they never trigger an understaffing flag.
+function isExternalSupport(f){
+  return (f.operators||[]).some(op=>{ const l=String(op).toLowerCase(); return l.includes('grecos') || l.includes('fischer'); });
+}
+// Staffing requirement scales with pax: 1 staff member per N pax (N = settings.paxThresh), rounded up.
+function requiredStaffCount(pax){
+  const per = STATE.settings.paxThresh || 25;
+  return Math.max(1, Math.ceil((Number(pax)||0)/per));
+}
+function isFlagged(f){
+  if(f.arrDep !== 'A') return false;
+  if(isExternalSupport(f)) return false;
+  return f.assigned.filter(id=>id!=='__DRIVER_UNRESOLVED__').length < requiredStaffCount(f.pax);
+}
+function flagLabel(f){
+  return isFlagged(f) ? `<span class="pax-flag">\u26a0 need ${requiredStaffCount(f.pax)}+</span>` : '';
+}
+// Operator-conflict detection: same staff member double-booked on two overlapping-duty
+// flights for DIFFERENT operators (different uniforms) on the same day. External-support
+// flights (GRECOS/Fischer) are excluded since our staff aren't really "on duty" there.
+function operatorKey(f){ return (f.operators||[]).map(o=>String(o).toLowerCase()).sort().join(','); }
+// Two different-operator flights only count as a scheduling conflict if their actual
+// flight times are within 30 minutes of each other -- plenty of gap (e.g. over an hour)
+// means there's realistically time to land, clear one flight, and move to the next.
+const CONFLICT_GAP_MIN = 30;
+function conflictingFlightsFor(staffId, f){
+  if(isExternalSupport(f)) return [];
+  const myKey = operatorKey(f), myTime = timeToMin(f.time);
+  return STATE.flights.filter(o=>
+    o.id!==f.id && o.date===f.date && o.airport===f.airport &&
+    o.assigned.includes(staffId) && !isExternalSupport(o) &&
+    operatorKey(o)!==myKey &&
+    Math.abs(timeToMin(o.time) - myTime) < CONFLICT_GAP_MIN &&
+    (isFlagged(f) || isFlagged(o)) // only a real conflict if one of the two is already short-staffed
+  );
+}
 
 // Merge overlapping/touching time windows into continuous blocks.
 // A real gap between windows (start of next > end of current) is preserved as a separate block.
@@ -530,9 +569,11 @@ function renderLiveBoard(){
       const s = STATE.staff.find(x=>x.id===sid);
       if(!s) return '';
       const t = dutyTimeLabel(f);
-      return `<span class="staff-chip" style="background:${colorFor(s)}">${s.name}${t?`<span class="chip-time">${t}</span>`:''}</span>`;
+      const conflicts = conflictingFlightsFor(sid, f);
+      const cBadge = conflicts.length ? `<span class="chip-conflict" title="Also on ${conflicts.map(c=>c.flight+' ('+(c.operators||[]).join('/')+')').join(', ')} at an overlapping time \u2014 different operator">⚔ conflict</span>` : '';
+      return `<span class="staff-chip${conflicts.length?' conflict':''}" style="background:${colorFor(s)}">${s.name}${t?`<span class="chip-time">${t}</span>`:''}${cBadge}</span>`;
     }).join('');
-    html += `<tr class="${flagged?'flagged':''}"><td><span class="pill ${f.arrDep}">${f.arrDep}</span></td><td style="font-family:var(--mono)">${f.time}</td><td>${flightCell(f)}</td><td>${f.pax}</td><td>${chips}</td><td>${flagged?'<span class="pax-flag">\u26a0 need 2+</span>':''}</td></tr>`;
+    html += `<tr class="${flagged?'flagged':''}"><td><span class="pill ${f.arrDep}">${f.arrDep}</span></td><td style="font-family:var(--mono)">${f.time}</td><td>${flightCell(f)}</td><td>${f.pax}</td><td>${chips}</td><td>${flagLabel(f)}</td></tr>`;
   });
   html += '</tbody></table>';
   tblWrap.innerHTML = html;
@@ -560,7 +601,9 @@ function renderFlightsTab(){
       const s = STATE.staff.find(x=>x.id===sid);
       if(!s) return '';
       const t = dutyTimeLabel(f);
-      return `<span class="staff-chip" style="background:${colorFor(s)}">${s.name}${t?`<span class="chip-time">${t}</span>`:''}<button data-unassign="${f.id}|${sid}">&times;</button></span>`;
+      const conflicts = conflictingFlightsFor(sid, f);
+      const cBadge = conflicts.length ? `<span class="chip-conflict" title="Also on ${conflicts.map(c=>c.flight+' ('+(c.operators||[]).join('/')+')').join(', ')} at an overlapping time \u2014 different operator">⚔ conflict</span>` : '';
+      return `<span class="staff-chip${conflicts.length?' conflict':''}" style="background:${colorFor(s)}">${s.name}${t?`<span class="chip-time">${t}</span>`:''}${cBadge}<button data-unassign="${f.id}|${sid}">&times;</button></span>`;
     }).join('');
     html += `<tr class="${flagged?'flagged':''}">
       <td><span class="pill ${f.arrDep}">${f.arrDep}</span></td>
@@ -576,7 +619,7 @@ function renderFlightsTab(){
           </div>
         </div>
       </td>
-      <td>${flagged?'<span class="pax-flag">\u26a0 need 2+</span>':''}</td>
+      <td>${flagLabel(f)}</td>
       <td><button class="btn ghost" data-delflight="${f.id}" style="padding:4px 8px;">Delete</button></td>
     </tr>`;
   });
@@ -589,7 +632,7 @@ function renderFlightsTab(){
     inp.addEventListener('change', async e=>{
       const f = STATE.flights.find(x=>x.id===inp.dataset.delay);
       f.delayMin = Number(inp.value)||0;
-      await saveFlights(); renderFlightsTab(); renderLiveBoard();
+      await saveFlights(); renderAll();
     });
   });
   wrap.querySelectorAll('[data-assignopen]').forEach(btn=>{
@@ -610,7 +653,7 @@ function renderFlightsTab(){
       if(cb.checked){ if(!f.assigned.includes(sid)) f.assigned.push(sid); }
       else { f.assigned = f.assigned.filter(x=>x!==sid); }
       openAssignMenuId = fid; // keep this flight's menu open so more names can be picked without reopening
-      await saveFlights(); renderFlightsTab(); renderLiveBoard();
+      await saveFlights(); renderAll();
     });
   });
   wrap.querySelectorAll('[data-unassign]').forEach(btn=>{
@@ -618,19 +661,19 @@ function renderFlightsTab(){
       const [fid,sid] = btn.dataset.unassign.split('|');
       const f = STATE.flights.find(x=>x.id===fid);
       f.assigned = f.assigned.filter(x=>x!==sid);
-      await saveFlights(); renderFlightsTab(); renderLiveBoard();
+      await saveFlights(); renderAll();
     });
   });
   wrap.querySelectorAll('[data-delflight]').forEach(btn=>{
     btn.addEventListener('click', async e=>{
       STATE.flights = STATE.flights.filter(x=>x.id!==btn.dataset.delflight);
-      await saveFlights(); renderFlightsTab(); renderLiveBoard();
+      await saveFlights(); renderAll();
     });
   });
 }
 function bindDriverBtn(){
   const btn = document.getElementById('resolveDriverBtn');
-  if(btn) btn.addEventListener('click', async ()=>{ await resolveDriverPrompt(currentFlightDate, currentAirport); renderFlightsTab(); renderLiveBoard(); });
+  if(btn) btn.addEventListener('click', async ()=>{ await resolveDriverPrompt(currentFlightDate, currentAirport); renderAll(); });
 }
 async function resolveDriverPrompt(dateISO, airport){
   const name = prompt('Who was working as Driver on '+dateISO+' at '+(airport==='LCA'?'Larnaca':'Paphos')+'?');
@@ -653,7 +696,7 @@ document.addEventListener('click', (e)=>{
 
 document.getElementById('flightDatePicker').addEventListener('change', e=>{
   currentFlightDate = e.target.value;
-  renderFlightsTab(); renderLiveBoard();
+  renderAll();
 });
 
 document.getElementById('addFlightBtn').addEventListener('click', async ()=>{
@@ -663,7 +706,7 @@ document.getElementById('addFlightBtn').addEventListener('click', async ()=>{
   const flight = prompt('Flight number','XX0000');
   const pax = Number(prompt('Pax count','0'))||0;
   STATE.flights.push({id:uid(), airport: currentAirport, date:currentFlightDate, arrDep:arrDep.toUpperCase()==='D'?'D':'A', time, flight, pax, operators:[], delayMin:0, assigned:[]});
-  await saveFlights(); renderFlightsTab(); renderLiveBoard();
+  await saveFlights(); renderAll();
 });
 
 document.getElementById('clearDateBtn').addEventListener('click', async ()=>{
@@ -672,7 +715,7 @@ document.getElementById('clearDateBtn').addEventListener('click', async ()=>{
   if(!confirm(`Remove all ${count} flight(s) for ${currentFlightDate} at ${currentAirport==='LCA'?'Larnaca':'Paphos'}? This can't be undone.`)) return;
   STATE.flights = STATE.flights.filter(f=>!(f.date===currentFlightDate && f.airport===currentAirport));
   await saveFlights();
-  renderFlightsTab(); renderLiveBoard();
+  renderAll();
 });
 
 const dropzone = document.getElementById('dropzone');
@@ -732,7 +775,7 @@ function handleFile(file){
       await saveStaff(); await saveFlights(); await saveUploadLog();
       const needsDriver = parsed.some(f=>f.assigned.includes('__DRIVER_UNRESOLVED__'));
       document.getElementById('importMsg').textContent = `Imported ${parsed.length} flights for ${dateFound} from "${file.name}".` + (needsDriver ? ' Some flights list "Driver" \u2014 set the name in the table below.' : '');
-      renderFlightsTab(); renderLiveBoard(); renderStaffTab(); renderWeekly(); renderUploadLog();
+      renderAll();
     }catch(err){
       document.getElementById('importMsg').textContent = 'Could not read that file: '+err.message;
     }
@@ -772,7 +815,7 @@ function wireDutyLogEvents(){
         const entry = readEntryFromRow(staffId);
         setDutyEntry(currentAirport, dutyLogDate, staffId, entry);
         await saveDutyLog();
-        renderDutyLogTab(); renderWeekly();
+        renderAll();
       });
     });
   });
@@ -784,7 +827,7 @@ function wireDutyLogEvents(){
       entry.blocks.push({start:'',end:''});
       setDutyEntry(currentAirport, dutyLogDate, staffId, entry);
       await saveDutyLog();
-      renderDutyLogTab();
+      renderAll();
     });
   });
   document.querySelectorAll('.duty-removeblock').forEach(btn=>{
@@ -797,7 +840,7 @@ function wireDutyLogEvents(){
       entry.blocks.splice(idx,1);
       setDutyEntry(currentAirport, dutyLogDate, staffId, entry);
       await saveDutyLog();
-      renderDutyLogTab(); renderWeekly();
+      renderAll();
     });
   });
 }
@@ -923,7 +966,7 @@ function renderStaffTab(){
   wrap.querySelectorAll('[data-stype]').forEach(sel=>{
     sel.addEventListener('change', async e=>{
       const s = STATE.staff.find(x=>x.id===sel.dataset.stype);
-      s.type = sel.value; await saveStaff(); renderStaffTab(); renderWeekly();
+      s.type = sel.value; await saveStaff(); renderAll();
     });
   });
   wrap.querySelectorAll('[data-delstaff]').forEach(btn=>{
@@ -931,7 +974,7 @@ function renderStaffTab(){
       STATE.staff = STATE.staff.filter(x=>x.id!==btn.dataset.delstaff);
       STATE.flights.forEach(f=>{ f.assigned = f.assigned.filter(id=>id!==btn.dataset.delstaff); });
       await saveStaff(); await saveFlights();
-      renderStaffTab(); renderFlightsTab(); renderLiveBoard(); renderWeekly();
+      renderAll();
     });
   });
 }
@@ -942,7 +985,7 @@ document.getElementById('addStaffBtn').addEventListener('click', async ()=>{
   const type = document.getElementById('newStaffType').value;
   const s = getOrCreateStaff(name, currentAirport); s.type = type;
   document.getElementById('newStaffName').value='';
-  await saveStaff(); renderStaffTab();
+  await saveStaff(); renderAll();
 });
 
 function loadSettingsForm(){
